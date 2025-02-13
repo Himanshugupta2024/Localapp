@@ -1,22 +1,23 @@
 import React from "react";
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from "react-native";
+import { RouteProp, useRoute } from '@react-navigation/native';
+import { RootStackParamList } from '../types'; // Import RootStackParamList
+
+type JobDetailsRouteProp = RouteProp<RootStackParamList, 'JobDetails'>;
 
 type JobDetailsProps = {
-  route: {
-    params: {
-      id: string;
-      title: string;
-      place: string;
-      salary: string;
-      phone: string;
-      whatsapp_link: string;
-      company: string;
-    };
-  };
+  navigation: any;
 };
 
-const JobDetails = ({ route }: JobDetailsProps) => {
+const JobDetails = ({ navigation }: JobDetailsProps) => {
+  const route = useRoute<JobDetailsRouteProp>();
   const { id, title, place, salary, phone, whatsapp_link, company } = route.params;
+
+  React.useLayoutEffect(() => {
+    navigation.setOptions({
+      title: title,
+    });
+  }, [navigation, title]);
 
   return (
     <View style={styles.container}>

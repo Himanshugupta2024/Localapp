@@ -1,135 +1,113 @@
-import React, { useCallback, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
+import React, { useEffect, useState } from "react";
 import {
-  Text,
-  View,
   FlatList,
   StyleSheet,
+  Text,
   TouchableOpacity,
-  Linking,
+  View,
 } from "react-native";
+import { Job } from "../types";
 
-type Job = {
-  id: number;
-  title: string;
-  primary_details: {
-    Place: string;
-    Salary: string;
-    Job_Type: string;
-    Experience: string;
-    Fees_Charged: string;
-    Qualification: string;
-  };
-  company_name: string;
-  whatsapp_no: string;
-  contact_preference: {
-    whatsapp_link: string;
-  };
-};
-
-const Bookmarks = () => {
+export default function Bookmarks() {
   const [bookmarkedJobs, setBookmarkedJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
 
-  useFocusEffect(
-    useCallback(() => {
-      const loadBookmarks = async () => {
-        const savedBookmarks = await AsyncStorage.getItem("bookmarkedJobs");
-        if (savedBookmarks) setBookmarkedJobs(JSON.parse(savedBookmarks));
-      };
-      loadBookmarks();
-    }, [])
-  );
+  useEffect(() => {
+    loadBookmarks();
+  }, []);
+
+  const loadBookmarks = async () => {
+    try {
+      const savedBookmarks = await AsyncStorage.getItem("bookmarkedJobs");
+      if (savedBookmarks) {
+        setBookmarkedJobs(JSON.parse(savedBookmarks));
+      }
+    } catch (err) {
+      console.error("Error loading bookmarks:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centerContent}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
+    );
+  }
+
+  if (bookmarkedJobs.length === 0) {
+    return (
+      <View style={styles.centerContent}>
+        <Text>No bookmarked jobs</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Bookmarked Jobs</Text>
-
-      {bookmarkedJobs.length === 0 ? (
-        <Text style={styles.emptyMessage}>No bookmarks yet</Text>
-      ) : (
-        <FlatList
-          data={bookmarkedJobs}
-          keyExtractor={(item) => `bookmark_${item.id}`}
-          renderItem={({ item }) => (
-            <View style={styles.card}>
-              <Text style={styles.jobTitle}>{item.title}</Text>
-              <Text style={styles.company}>{item.company_name}</Text>
-              <Text style={styles.detail}>📍 {item.primary_details?.Place}</Text>
-              <Text style={styles.detail}>💰 {item.primary_details?.Salary}</Text>
-              <Text style={styles.detail}>🛠 {item.primary_details?.Job_Type}</Text>
-              <TouchableOpacity
-                style={styles.button}
-                onPress={() => {
-                  const whatsappLink = item.contact_preference?.whatsapp_link;
-                  if (whatsappLink) {
-                    Linking.openURL(whatsappLink);
-                  }
-                }}
-              >
-                <Text style={styles.buttonText}>Contact via WhatsApp</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        />
-      )}
+      <FlatList
+        data={bookmarkedJobs}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            style={styles.card}
+            onPress={() => {
+              navigation.navigate("JobDetails", {
+                id: item.id.toString(),
+                title: item.title,
+                place: item.primary_details?.Place ?? "Location not available",
+                salary: item.primary_details?.Salary ?? "Salary not specified",
+                phone: item.whatsapp_no,
+                whatsapp_link: item.contact_preference?.whatsapp_link ?? "",
+                company: item.company_name,
+              });
+            }}
+          >
+            <Text style={styles.title}>{item.title}</Text>
+            <Text style={styles.detail}>
+              📍 {item.primary_details?.Place ?? "Location not available"}
+            </Text>
+            <Text style={styles.detail}>
+              💰 {item.primary_details?.Salary ?? "Salary not specified"}
+            </Text>
+            <Text style={styles.detail}>📞 {item.whatsapp_no}</Text>
+          </TouchableOpacity>
+        )}
+        keyExtractor={(item) => `bookmark_${item.id}`}
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f8f9fa",
+    padding: 16,
+    backgroundColor: "#f5f5f5",
   },
-  header: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 15,
-    textAlign: "center",
-  },
-  emptyMessage: {
-    textAlign: "center",
-    fontSize: 16,
-    color: "gray",
-    marginTop: 20,
+  centerContent: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   card: {
-    backgroundColor: "white",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
+    backgroundColor: "#fff",
+    padding: 16,
+    marginBottom: 16,
+    borderRadius: 8,
   },
-  jobTitle: {
+  title: {
     fontSize: 18,
     fontWeight: "bold",
-    marginBottom: 5,
-  },
-  company: {
-    fontSize: 16,
-    color: "gray",
-    marginBottom: 5,
+    marginBottom: 8,
   },
   detail: {
     fontSize: 14,
-    marginBottom: 3,
-  },
-  button: {
-    marginTop: 10,
-    backgroundColor: "#25D366",
-    padding: 10,
-    borderRadius: 5,
-    alignItems: "center",
-  },
-  buttonText: {
-    color: "white",
-    fontWeight: "bold",
+    color: "#666",
+    marginBottom: 4,
   },
 });
-
-export default Bookmarks;

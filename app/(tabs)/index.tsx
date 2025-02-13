@@ -1,8 +1,9 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
-import { router } from "expo-router";
+import { useNavigation } from "@react-navigation/native";
 import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Linking,
   StyleSheet,
@@ -11,25 +12,7 @@ import {
   View,
 } from "react-native";
 import FontAwesome from "react-native-vector-icons/FontAwesome";
-
-// Define the type for a job
-type Job = {
-  id: number;
-  title: string;
-  primary_details: {
-    Place: string;
-    Salary: string;
-    Job_Type: string;
-    Experience: string;
-    Fees_Charged: string;
-    Qualification: string;
-  };
-  company_name: string;
-  whatsapp_no: string;
-  contact_preference: {
-    whatsapp_link: string;
-  };
-};
+import { Job } from "../types";
 
 const API_URL = "https://testapi.getlokalapp.com/common/jobs";
 
@@ -38,16 +21,23 @@ export default function Index() {
   const [bookmarkedJobs, setBookmarkedJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const navigation = useNavigation();
 
   // Load bookmarks from AsyncStorage
   useEffect(() => {
-    const loadBookmarks = async () => {
-      const savedBookmarks = await AsyncStorage.getItem("bookmarkedJobs");
-      if (savedBookmarks) setBookmarkedJobs(JSON.parse(savedBookmarks));
-    };
     loadBookmarks();
   }, []);
+
+  const loadBookmarks = async () => {
+    try {
+      const savedBookmarks = await AsyncStorage.getItem("bookmarkedJobs");
+      if (savedBookmarks) setBookmarkedJobs(JSON.parse(savedBookmarks));
+    } catch (err) {
+      console.error("Error loading bookmarks:", err);
+    }
+  };
 
   // Fetch jobs from API
   const fetchJobs = async () => {
@@ -56,11 +46,12 @@ export default function Index() {
     setError(null);
 
     try {
-      const response = await axios.get(`${API_URL}?page=1`);
+      const response = await axios.get(`${API_URL}?page=${page}`);
       const newJobs = response.data.results;
 
       if (newJobs && newJobs.length > 0) {
         setJobs((prevJobs) => [...prevJobs, ...newJobs]);
+        setPage(page + 1);
       } else {
         setHasMore(false);
       }
@@ -77,18 +68,32 @@ export default function Index() {
 
   // Toggle Bookmark
   const toggleBookmark = async (job: Job) => {
-    let updatedBookmarks;
-    if (bookmarkedJobs.some((bookmarkedJob) => bookmarkedJob.id === job.id)) {
-      updatedBookmarks = bookmarkedJobs.filter(
-        (bookmarkedJob) => bookmarkedJob.id !== job.id
+    try {
+      let updatedBookmarks;
+      if (bookmarkedJobs.some((bookmarkedJob) => bookmarkedJob.id === job.id)) {
+        updatedBookmarks = bookmarkedJobs.filter(
+          (bookmarkedJob) => bookmarkedJob.id !== job.id
+        );
+      } else {
+        updatedBookmarks = [...bookmarkedJobs, job];
+      }
+      setBookmarkedJobs(updatedBookmarks);
+      await AsyncStorage.setItem(
+        "bookmarkedJobs",
+        JSON.stringify(updatedBookmarks)
       );
-    } else {
-      updatedBookmarks = [...bookmarkedJobs, job];
+    } catch (err) {
+      console.error("Error saving bookmark:", err);
     }
-    setBookmarkedJobs(updatedBookmarks);
-    await AsyncStorage.setItem(
-      "bookmarkedJobs",
-      JSON.stringify(updatedBookmarks)
+  };
+
+  // Render footer for loading state
+  const renderFooter = () => {
+    if (!loading) return null;
+    return (
+      <View style={styles.loadingFooter}>
+        <ActivityIndicator size="large" color="#0000ff" />
+      </View>
     );
   };
 
@@ -117,20 +122,17 @@ export default function Index() {
 
           {/* Job Card */}
           <TouchableOpacity
-            onPress={() =>
-              router.push({
-                pathname: `/screens/Jobs/[id]`, // Use dynamic segment
-                params: {
-                  id: item.id.toString(), // Ensure id is a string
-                  title: item.title,
-                  place,
-                  salary,
-                  phone: item.whatsapp_no,
-                  whatsapp_link: item.contact_preference?.whatsapp_link ?? "",
-                  company: item.company_name,
-                },
-              })
-            }
+            onPress={() => {
+              navigation.navigate("JobDetails", {
+                id: item.id.toString(),
+                title: item.title,
+                place: place,
+                salary: salary,
+                phone: item.whatsapp_no,
+                whatsapp_link: item.contact_preference?.whatsapp_link ?? "",
+                company: item.company_name,
+              });
+            }}
           >
             <Text style={styles.title}>{item.title}</Text>
             <Text style={styles.location}>📍 {place}</Text>
@@ -153,25 +155,37 @@ export default function Index() {
         </View>
       );
     },
-    [bookmarkedJobs]
+    [bookmarkedJobs, navigation]
   );
 
   return (
     <View style={styles.container}>
-      {error && <Text style={styles.errorText}>{error}</Text>}
-      <FlatList
-        data={jobs}
-        renderItem={renderJobCard}
-        keyExtractor={(item, index) => `job_${item.id}_${index}`}
-        onEndReached={fetchJobs}
-        onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.listContainer}
-      />
+      {error ? (
+        <View style={styles.centerContent}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchJobs}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      ) : jobs.length === 0 && !loading ? (
+        <View style={styles.centerContent}>
+          <Text>No jobs found</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={jobs}
+          renderItem={renderJobCard}
+          keyExtractor={(item, index) => `job_${item.id}_${index}`}
+          onEndReached={fetchJobs}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={renderFooter}
+          contentContainerStyle={styles.listContainer}
+        />
+      )}
     </View>
   );
 }
 
-// Styles
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, backgroundColor: "#f5f5f5" },
   listContainer: { paddingBottom: 20 },
@@ -196,4 +210,23 @@ const styles = StyleSheet.create({
   whatsappButtonText: { color: "#fff", fontWeight: "bold" },
   errorText: { color: "red", fontSize: 16, textAlign: "center", marginTop: 20 },
   bookmarkButton: { position: "absolute", top: 10, right: 10 },
+  loadingFooter: {
+    padding: 10,
+    alignItems: 'center',
+  },
+  centerContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  retryButton: {
+    marginTop: 10,
+    padding: 10,
+    backgroundColor: '#007AFF',
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });
